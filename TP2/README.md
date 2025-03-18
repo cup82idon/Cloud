@@ -60,11 +60,47 @@ C:\Users\Utilisateur>az vm create --resource-group Léo --name az --image Ubuntu
 C:\Users\Utilisateur>az vm create --resource-group Léo --name az2 --image Ubuntu2204 --admin-username azureuser --ssh-key-values ~/.ssh/id_rsa.pub --public-ip-sku Standard --vnet-name VNet --subnet Subnet
 ~~~
 
+Vérification des IP et ping :
 
-- assurez-vous qu'elles ont une IP privée (avec `ip a`)
-- elles peuvent se `ping` en utilisant cette IP privée
-- deux VMs dans un LAN quoi !
+~~~bash
+azureuser@az:~$ ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host
+       valid_lft forever preferred_lft forever
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000
+    link/ether 60:45:bd:72:c2:46 brd ff:ff:ff:ff:ff:ff
+    inet 10.0.0.4/24 metric 100 brd 10.0.0.255 scope global eth0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::6245:bdff:fe72:c246/64 scope link
+       valid_lft forever preferred_lft forever
 
-> *N'hésitez pas à vous rendre sur la WebUI de Azure pour voir vos VMs créées.*
 
----
+azureuser@az2:~$ ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host
+       valid_lft forever preferred_lft forever
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000
+    link/ether 7c:ed:8d:27:22:f3 brd ff:ff:ff:ff:ff:ff
+    inet 10.0.0.5/24 metric 100 brd 10.0.0.255 scope global eth0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::7eed:8dff:fe27:22f3/64 scope link
+       valid_lft forever preferred_lft forever
+
+
+azureuser@az:~$ ping 10.0.0.5
+PING 10.0.0.5 (10.0.0.5) 56(84) bytes of data.
+64 bytes from 10.0.0.5: icmp_seq=1 ttl=64 time=1.15 ms
+64 bytes from 10.0.0.5: icmp_seq=2 ttl=64 time=0.823 ms
+64 bytes from 10.0.0.5: icmp_seq=3 ttl=64 time=0.653 ms
+64 bytes from 10.0.0.5: icmp_seq=4 ttl=64 time=0.870 ms
+^C
+--- 10.0.0.5 ping statistics ---
+4 packets transmitted, 4 received, 0% packet loss, time 3076ms
+rtt min/avg/max/mdev = 0.653/0.875/1.154/0.180 ms
+~~~
