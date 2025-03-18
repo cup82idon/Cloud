@@ -104,3 +104,64 @@ PING 10.0.0.5 (10.0.0.5) 56(84) bytes of data.
 4 packets transmitted, 4 received, 0% packet loss, time 3076ms
 rtt min/avg/max/mdev = 0.653/0.875/1.154/0.180 ms
 ~~~
+
+# Part II : cloud-init
+
+## 2. Gooooo
+
+🌞 **Tester `cloud-init`**
+
+Création de la VM avec cloud-init qui créer un user cmeyer :
+
+~~~bash
+az vm create --resource-group Léo --name cloudinit-vm --image Ubuntu2204 --admin-username azureuser --ssh-key-values ~/.ssh/id_rsa.pub --custom-data C:\Users\Utilisateur\OneDrive\Bureau\TP_Leo\cloud_init.txt --public-ip-sku Standard
+~~~
+
+🌞 **Vérifier que `cloud-init` a bien fonctionné**
+
+~~~bash
+C:\Users\Utilisateur>ssh cmeyer@20.244.125.121
+The authenticity of host '20.244.125.121 (20.244.125.121)' can't be established.
+[...]
+
+cmeyer@cloudinit-vm:~$
+~~~
+
+## 3. Write your own
+
+🌞 **Utilisez `cloud-init` pour préconfigurer la VM :**
+
+cloud-config.txt :
+
+~~~bash
+#cloud-config
+users:
+  - name: cup82idon
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    groups: sudo, docker
+    ssh_authorized_keys:
+      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDMv69bK3zGwHlrUsdyY8RGJas1nufp0Kypn7Dp87W7geLmJsxjvyiwyE4T9Ed1ylD6jPWJFUdBl1ppBSf5UH/KrJHvkCr73o3u3O+giuHTCeRX3RVm5pdbMRFNObM9z+fiwWLE8T7p4l1ukAvKskELgvPImcFqdGI2QxgWLFPQNGF1FqDFj66OtNq0ulqTEIPDU6xOSFnxhsYinqYm5ShXHROWyEUqqSaEqyutXk3aK0pitX43e1YKO9YhkCsH18FEJQCIYmdjIZivcpfMOdeILhRG5NtvGceBiO6lNxR6htbjN6C4SzxIs2dkBQKoJ2t3Cn4+aGKyYUEBC9vGAC2P/sGBQGFUkMaGAHpX7wS7qUV8ydCLxCqUNoQWOzbvfaz54TybjTxeq3fAmN9w9VPQGr4E7hCGlCwWEEsmA5+0aL/aAVb/uHmEokEQ5OtoqhzzeJ9+NV6JbtItfuokiwFDdC9b+KKe6sAt/iFffPMvVK8Y79aN3HCLq2ucgbNFaPq6hlQPYLEcxgE/qF7w+PNfxL/BVL7M/YXPHH+Oa+H4cbHIDCUyHrE3EtZE/HaDYtOH5t73YcS+wn5TW1VqavAu7GlQOmKjPV8OXKeL8yikoaFcJ80ecG8nD6PfsCqjuty8LHAa3SULwMlbazT8RLBLc983FBgCxu/TYvdCRXN12w== utilisateur@Pc-Cup
+    passwd: $6$hZS0BI.6qGRuSilj$FaAQJpQNK9NxVT9KT0EfLB8SlAJWRYCORV0D5AGhXyOTciw/ZZWFf1mPDS5ZzNLpfPIOI9Bvki/Zwhna95Hmn.
+
+package_update: true
+package_upgrade: true
+
+runcmd:
+  - apt-get update && apt-get install -y docker.io
+  - usermod -aG docker cup82idon
+  - systemctl enable --now docker
+  - docker pull alpine:latest
+~~~
+
+Création de la VM et connexion avec le user cup82idon :
+
+~~~bash
+C:\Users\Utilisateur>az vm create --resource-group Léo --name cloudinit-docker --image Ubuntu2204 --admin-username azureuser --ssh-key-values ~/.ssh/id_rsa.pub --custom-data C:\Users\Utilisateur\OneDrive\Bureau\TP_Leo\cloud-init.txt --public-ip-sku Standard
+
+
+C:\Users\Utilisateur>ssh cup82idon@74.225.203.211
+The authenticity of host '74.225.203.211 (74.225.203.211)' can't be established.
+[...]
+cup82idon@cloudinit-docker:~$
+~~~
