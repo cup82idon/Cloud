@@ -165,3 +165,224 @@ The authenticity of host '74.225.203.211 (74.225.203.211)' can't be established.
 [...]
 cup82idon@cloudinit-docker:~$
 ~~~
+
+# Part III : Terraform
+
+🌞 **Constater le déploiement**
+
+~~~bash
+PS C:\Users\Utilisateur\OneDrive\Bureau\TP_Leo\Terraform> az vm list -o table
+Name    ResourceGroup    Location      Zones
+------  ---------------  ------------  -------
+tp2-vm  TP2-RESOURCES    westeurope
+
+
+PS C:\Users\Utilisateur\OneDrive\Bureau\TP_Leo\Terraform> az vm show --name tp2-vm --resource-group TP2-RESOURCES -o table
+Name    ResourceGroup    Location    Zones
+------  ---------------  ----------  -------
+tp2-vm  TP2-RESOURCES    westeurope
+
+
+PS C:\Users\Utilisateur\OneDrive\Bureau\TP_Leo\Terraform> az group list -o table
+Name              Location      Status
+----------------  ------------  ---------
+tp2-resources     westeurope    Succeeded
+~~~
+
+➜ **Autres commandes Terraform**
+
+```bash
+# Vérifier que votre fichier .tf est valide
+$ terraform validate
+
+# Formate un fichier .tf au format standard
+$ terraform fmt
+
+# Afficher les ressources du déploiement
+$ terraform state list
+
+# Afficher les détails d'une des ressources du déploiement
+$ terraform state show <RESSOURCE>
+
+# Détruit les ressources déployées
+$ terraform destroy
+```
+
+## 3. Do it yourself
+
+🌞 **Créer un *plan Terraform* avec les contraintes suivantes**
+
+`main.tf` :
+
+~~~bash
+provider "azurerm" {
+  features {}
+  subscription_id = "f92007d8-4bb1-42ac-8372-f4fe3cfc0ad3"
+}
+
+resource "azurerm_resource_group" "main" {
+  name     = "${var.prefix}-resources"
+  location = var.location
+}
+
+resource "azurerm_virtual_network" "main" {
+  name                = "${var.prefix}-network"
+  address_space       = ["10.0.0.0/16"]
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+}
+
+resource "azurerm_subnet" "internal" {
+  name                 = "internal"
+  resource_group_name  = azurerm_resource_group.main.name
+  virtual_network_name = azurerm_virtual_network.main.name
+  address_prefixes     = ["10.0.2.0/24"]
+}
+
+resource "azurerm_public_ip" "node1_pip" {
+  name                = "${var.prefix}-node1-pip"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  allocation_method   = "Static"
+}
+
+resource "azurerm_network_interface" "node1_nic" {
+  name                = "${var.prefix}-node1-nic"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+
+  ip_configuration {
+    name                          = "public"
+    subnet_id                     = azurerm_subnet.internal.id
+    private_ip_address_allocation = "Dynamic"
+    public_ip_address_id          = azurerm_public_ip.node1_pip.id
+  }
+}
+
+resource "azurerm_network_interface" "node2_nic" {
+  name                = "${var.prefix}-node2-nic"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+
+  ip_configuration {
+    name                          = "private"
+    subnet_id                     = azurerm_subnet.internal.id
+    private_ip_address_allocation = "Dynamic"
+  }
+}
+
+resource "azurerm_network_security_group" "ssh" {
+  name                = "${var.prefix}-ssh-nsg"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+
+  security_rule {
+    name                       = "allow_ssh"
+    priority                   = 100
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    source_address_prefix      = "*"
+    destination_port_range     = "22"
+    destination_address_prefix = "*"
+  }
+}
+
+resource "azurerm_network_interface_security_group_association" "node1_assoc" {
+  network_interface_id      = azurerm_network_interface.node1_nic.id
+  network_security_group_id = azurerm_network_security_group.ssh.id
+}
+
+resource "azurerm_linux_virtual_machine" "node1" {
+  name                  = "${var.prefix}-node1"
+  resource_group_name   = azurerm_resource_group.main.name
+  location              = azurerm_resource_group.main.location
+  size                  = "Standard_F2"
+  admin_username        = "azureuser"
+  network_interface_ids = [azurerm_network_interface.node1_nic.id]
+
+  admin_ssh_key {
+    username   = "azureuser"
+    public_key = file("~/.ssh/id_rsa.pub")
+  }
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-server-jammy"
+    sku       = "22_04-lts"
+    version   = "latest"
+  }
+
+  os_disk {
+    storage_account_type = "Standard_LRS"
+    caching              = "ReadWrite"
+  }
+}
+
+resource "azurerm_linux_virtual_machine" "node2" {
+  name                  = "${var.prefix}-node2"
+  resource_group_name   = azurerm_resource_group.main.name
+  location              = azurerm_resource_group.main.location
+  size                  = "Standard_F2"
+  admin_username        = "azureuser"
+  network_interface_ids = [azurerm_network_interface.node2_nic.id]
+
+  admin_ssh_key {
+    username   = "azureuser"
+    public_key = file("~/.ssh/id_rsa.pub")
+  }
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-server-jammy"
+    sku       = "22_04-lts"
+    version   = "latest"
+  }
+
+  os_disk {
+    storage_account_type = "Standard_LRS"
+    caching              = "ReadWrite"
+  }
+}
+~~~
+
+`variables.tf` :
+
+~~~bash
+variable "prefix" {
+  description = "Préfixe des ressources Azure"
+  default     = "tp2Etape2"
+}
+
+variable "location" {
+  description = "Région Azure"
+  default     = "West Europe"
+}
+~~~
+
+Connexion en ssh à node1 :
+
+~~~bash
+C:\Users\Utilisateur>ssh azureuser@20.4.68.12
+The authenticity of host '20.4.68.12 (20.4.68.12)' can't be established.
+[...]
+
+azureuser@tp2Etape2-node1:~$
+~~~
+
+Connexion en ssh à node2 via node1 :
+
+~~~bash
+C:\Users\Utilisateur>ssh -J azureuser@20.4.68.12 azureuser@10.0.2.5
+The authenticity of host '10.0.2.5 (<no hostip for proxy command>)' can't 
+[...]
+
+azureuser@tp2Etape2-node2:~$
+~~~
+
+## 4. cloud-iniiiiiiiiiiiiit
+
+### A. Un premier tf + cloud-init
+
+🌞 **Intégrer la gestion de `cloud-init`**
