@@ -189,25 +189,6 @@ Name              Location      Status
 tp2-resources     westeurope    Succeeded
 ~~~
 
-➜ **Autres commandes Terraform**
-
-```bash
-# Vérifier que votre fichier .tf est valide
-$ terraform validate
-
-# Formate un fichier .tf au format standard
-$ terraform fmt
-
-# Afficher les ressources du déploiement
-$ terraform state list
-
-# Afficher les détails d'une des ressources du déploiement
-$ terraform state show <RESSOURCE>
-
-# Détruit les ressources déployées
-$ terraform destroy
-```
-
 ## 3. Do it yourself
 
 🌞 **Créer un *plan Terraform* avec les contraintes suivantes**
@@ -217,7 +198,7 @@ $ terraform destroy
 ~~~bash
 provider "azurerm" {
   features {}
-  subscription_id = "f92007d8-4bb1-42ac-8372-f4fe3cfc0ad3"
+  subscription_id = " "
 }
 
 resource "azurerm_resource_group" "main" {
@@ -385,7 +366,7 @@ PING 10.0.2.5 (10.0.2.5) 56(84) bytes of data.
 ~~~bash
 provider "azurerm" {
   features {}
-  subscription_id = "f92007d8-4bb1-42ac-8372-f4fe3cfc0ad3"
+  subscription_id = " "
 }
 
 resource "azurerm_resource_group" "main" {
@@ -524,3 +505,188 @@ Docker version 26.1.3, build 26.1.3-0ubuntu1~22.04.1
 ~~~
 
 🌞 **Moar `cloud-init` and Terraform configuration**
+
+`main.tf` :
+
+~~~bash
+provider "azurerm" {
+  features {}
+  subscription_id = " "
+}
+
+resource "azurerm_resource_group" "main" {
+  name     = "${var.prefix}-resources"
+  location = var.location
+}
+
+resource "azurerm_virtual_network" "main" {
+  name                = "${var.prefix}-network"
+  address_space       = ["10.0.0.0/16"]
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+}
+
+resource "azurerm_subnet" "internal" {
+  name                 = "internal"
+  resource_group_name  = azurerm_resource_group.main.name
+  virtual_network_name = azurerm_virtual_network.main.name
+  address_prefixes     = ["10.0.2.0/24"]
+}
+
+resource "azurerm_public_ip" "vm_pip" {
+  name                = "${var.prefix}-vm-pip"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  allocation_method   = "Static"
+}
+
+resource "azurerm_network_interface" "vm_nic" {
+  name                = "${var.prefix}-vm-nic"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+
+  ip_configuration {
+    name                          = "public"
+    subnet_id                     = azurerm_subnet.internal.id
+    private_ip_address_allocation = "Dynamic"
+    public_ip_address_id          = azurerm_public_ip.vm_pip.id
+  }
+}
+
+resource "azurerm_network_security_group" "vm_nsg" {
+  name                = "${var.prefix}-vm-nsg"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+
+  security_rule {
+    name                       = "allow_ssh"
+    priority                   = 100
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    source_address_prefix      = "*"
+    destination_port_range     = "22"
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "allow_wikijs"
+    priority                   = 200
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    source_address_prefix      = "*"
+    destination_port_range     = "10101"
+    destination_address_prefix = "*"
+  }
+}
+
+resource "azurerm_network_interface_security_group_association" "vm_assoc" {
+  network_interface_id      = azurerm_network_interface.vm_nic.id
+  network_security_group_id = azurerm_network_security_group.vm_nsg.id
+}
+
+resource "azurerm_linux_virtual_machine" "vm" {
+  name                  = "${var.prefix}-vm"
+  resource_group_name   = azurerm_resource_group.main.name
+  location              = azurerm_resource_group.main.location
+  size                  = "Standard_F2"
+  admin_username        = "azureuser"
+  network_interface_ids = [azurerm_network_interface.vm_nic.id]
+
+  admin_ssh_key {
+    username   = "azureuser"
+    public_key = file("~/.ssh/id_rsa.pub")
+  }
+
+  custom_data = filebase64("${path.module}/cloud-init.txt")
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-server-jammy"
+    sku       = "22_04-lts"
+    version   = "latest"
+  }
+
+  os_disk {
+    storage_account_type = "Standard_LRS"
+    caching              = "ReadWrite"
+  }
+}
+~~~
+
+`cloud-init.txt` :
+
+~~~bash
+#cloud-config
+users:
+  - name: cup82idon
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: docker
+    shell: /bin/bash
+    passwd: $6$hZS0BI.6qGRuSilj$FaAQJpQNK9NxVT9KT0EfLB8SlAJWRYCORV0D5AGhXyOTciw/ZZWFf1mPDS5ZzNLpfPIOI9Bvki/Zwhna95Hmn.
+    ssh_authorized_keys:
+      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDMv69bK3zGwHlrUsdyY8RGJas1nufp0Kypn7Dp87W7geLmJsxjvyiwyE4T9Ed1ylD6jPWJFUdBl1ppBSf5UH/KrJHvkCr73o3u3O+giuHTCeRX3RVm5pdbMRFNObM9z+fiwWLE8T7p4l1ukAvKskELgvPImcFqdGI2QxgWLFPQNGF1FqDFj66OtNq0ulqTEIPDU6xOSFnxhsYinqYm5ShXHROWyEUqqSaEqyutXk3aK0pitX43e1YKO9YhkCsH18FEJQCIYmdjIZivcpfMOdeILhRG5NtvGceBiO6lNxR6htbjN6C4SzxIs2dkBQKoJ2t3Cn4+aGKyYUEBC9vGAC2P/sGBQGFUkMaGAHpX7wS7qUV8ydCLxCqUNoQWOzbvfaz54TybjTxeq3fAmN9w9VPQGr4E7hCGlCwWEEsmA5+0aL/aAVb/uHmEokEQ5OtoqhzzeJ9+NV6JbtItfuokiwFDdC9b+KKe6sAt/iFffPMvVK8Y79aN3HCLq2ucgbNFaPq6hlQPYLEcxgE/qF7w+PNfxL/BVL7M/YXPHH+Oa+H4cbHIDCUyHrE3EtZE/HaDYtOH5t73YcS+wn5TW1VqavAu7GlQOmKjPV8OXKeL8yikoaFcJ80ecG8nD6PfsCqjuty8LHAa3SULwMlbazT8RLBLc983FBgCxu/TYvdCRXN12w== utilisateur@Pc-Cup
+
+apt:
+  sources:
+    docker.list:
+      source: deb [arch=amd64] https://download.docker.com/linux/ubuntu $RELEASE stable
+      keyid: 9DC858229FC7DD38854AE2D88D81803C0EBFCD88
+
+packages:
+  - docker-ce
+  - docker-ce-cli
+  - docker-compose
+
+write_files:
+  - path: /opt/wikijs/docker-compose.yml
+    owner: root:root
+    permissions: '0644'
+    content: |
+      version: '3'
+      
+      services:
+        db:
+          image: postgres:15
+          container_name: wikijs_db
+          restart: always
+          environment:
+            POSTGRES_DB: wiki
+            POSTGRES_USER: wikijs
+            POSTGRES_PASSWORD: password
+          volumes:
+            - db_data:/var/lib/postgresql/data
+
+        wikijs:
+          image: requarks/wiki:2
+          container_name: wikijs
+          restart: always
+          depends_on:
+            - db
+          ports:
+            - "10101:3000"
+          environment:
+            DB_TYPE: postgres
+            DB_HOST: db
+            DB_PORT: 5432
+            DB_USER: wikijs
+            DB_PASS: password
+            DB_NAME: wiki
+
+      volumes:
+        db_data:
+
+runcmd:
+  - docker-compose -f /opt/wikijs/docker-compose.yml up -d
+~~~
+
+`curl` :
+
+~~~bash
+cup82idon@wikijs-vm:~$ curl 20.107.32.66:10101
+<!DOCTYPE html><html><head><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta charset="UTF-8"><meta name="viewport" content="user-scalable=yes, width=device-width, initial-scale=1, maximum-scale=5"><meta name="theme-color" content="#1976d2"><meta name="msapplication-TileColor" content="#1976d2"><meta name="msapplication-TileImage" content="/_assets/favicons/mstile-150x150.png"><title>Wiki.js Setup</title><link rel="apple-touch-icon" sizes="180x180" href="/_assets/favicons/apple-touch-icon.png"><link rel="icon" type="image/png" sizes="192x192" href="/_assets/favicons/android-chrome-192x192.png"><link rel="icon" type="image/png" sizes="32x32" href="/_assets/favicons/favicon-32x32.png"><link rel="icon" type="image/png" sizes="16x16" href="/_assets/favicons/favicon-16x16.png"><link rel="mask-icon" href="/_assets/favicons/safari-pinned-tab.svg" color="#1976d2"><link rel="manifest" href="/_assets/manifest.json"><script>var siteConfig = {"title":"Wiki.js"}
+</script><link type="text/css" rel="stylesheet" href="/_assets/css/setup.22871ffac1b643eed4d9.css"><script type="text/javascript" src="/_assets/js/runtime.js?1738531300"></script><script type="text/javascript" src="/_assets/js/setup.js?1738531300"></script></head><body><div id="root"><setup wiki-version="2.5.306"></setup></div></body></html>
+~~~
