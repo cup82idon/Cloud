@@ -516,4 +516,11 @@ The authenticity of host '20.224.88.194 (20.224.88.194)' can't be established.
 azureuser@tp2CloudInit-vm:~$
 ~~~
 
+Docker bien installé :
+
+~~~bash
+azureuser@tp2CloudInit-vm:~$ docker -v
+Docker version 26.1.3, build 26.1.3-0ubuntu1~22.04.1
+~~~
+
 🌞 **Moar `cloud-init` and Terraform configuration**
